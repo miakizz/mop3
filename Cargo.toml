@@ -1,6 +1,7 @@
 [package]
 name = "mop3"
 version = "0.1.0"
+edition = "2021"
 authors = ["Nathan Kiesman <nwk2103@columbia.edu>"]
 license = "MIT"
 description = "A Mastodon to POP3 gateway"
