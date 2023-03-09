@@ -14,3 +14,5 @@ On the first connection, MOP3 will fetch the last 40 posts on your timeline, and
 
 ## Disclaimer
 You run this application _at your own risk_. MOP3 is my first Rust application, and so probably contains code slightly below world class levels. It is also speaking a protocol from the 90s/70s, with no security, and little authentication. I don't reccomend running this on the internet. I also tried to be friendly with my use of the Mastodon API, but I'm not responsible for any DMs from your sysop if it does something weird. However, the code is relatively simple, it's been tested, and especially with the `--token` option, not passing around secret data, so it _should_ be perfectly safe to run on a LAN.
+![Outlook Express displaying Mastodon posts](/screenshots/mop3-win.png?raw=true "MOP3 on Outlook Express")
+![Mail.app displaying Mastodon posts](/screenshots/mop3-mac.png?raw=true "MOP3 on MacOS Monterey Mail")
