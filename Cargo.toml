@@ -1,0 +1,20 @@
+[package]
+name = "mop3"
+version = "0.1.0"
+authors = ["Nathan Kiesman <nwk2103@columbia.edu>"]
+license = "MIT"
+description = "A Mastodon to POP3 gateway"
+readme = "README.md"
+homepage = "https://github.com/nkizz/mop3"
+repository = "https://github.com/nkizz/mop3"
+keywords = ["mastodon", "retrocomputing"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+serde_json = "1.0"
+reqwest = { version = "0.11.14", features = ["blocking"] }
+string_concat = "0.0.1"
+html2text = "0.5.0"
+chrono = "0.4.23"
+clap = { version = "4.1.8", features = ["derive"] }
+deunicode = "1.3.3"
