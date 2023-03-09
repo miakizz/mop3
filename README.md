@@ -10,7 +10,7 @@ This is written in Rust, so running `cargo install mop3` on your host should ins
 
 ## Usage
 This requires an access token, which can be obtained in Preferences -> Development -> New Application on your Mastodon instance. MOP3 only requires read permissions, so I reccomend not giving it any of the other ones. The client key and secret are not required.
-`mop3 --help` will give you all of the important runtime flags, none of which are required, but `--token` can be especially useful if you don't want to type in your access token on your retro machine. By default the server binds to localhost, post 110.
+`mop3 --help` will give you all of the important runtime flags, none of which are required, but `--token` can be especially useful if you don't want to type in your access token on your retro machine. By default the server binds to localhost, post 110. To enable connections from other clients, pass the option `--address 0.0.0.0:110`.
 To connect to it, point your client at the server ip/port, with the username of "username@mastoinstance.com" and the password of your account token, no SSL/TLS/SPA. Some clients will not include the domain name in the username by default, so make sure it includes both parts, or use `--user`.
 On the first connection, MOP3 will fetch the last 40 posts on your timeline, and all posts since the last time it connected on every subsequent connection. It can't differentiate between clients, so the server will need to be restarted to refetch posts on a new client.
 

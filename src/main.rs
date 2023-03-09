@@ -59,6 +59,7 @@ fn main() {
     //Most recent ID fetched, passed to API call to reduce server load
     let mut recent = "".to_string();
     let account = args.address.as_deref().unwrap_or("127.0.0.1:110");
+    println!("Listening on {}", account);
     loop{
         let listener = TcpListener::bind(account).unwrap();
         for stream in listener.incoming() {
