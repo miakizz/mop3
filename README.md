@@ -1,22 +1,24 @@
 # MOP3
-A Mastodon to POP3 Gateway
+A Mastodon to email client Gateway
 
-MOP3 is a toy-ish, standard complient-ish server which speaks POP3, and serves data from your home Mastodon timeline. This enables email clients made as early as the 1980s to receive and display Mastodon posts. MOP3 is intended less for everyday use, and more for retro-computing, as it can be difficult to setup an email server to play with old clients, and modern email servers want silly things like security. With that said, it could be used as a true Mastodon client, as even modern email clients like Apple's Mail.app support POP3. Emails are served in plain-text with the HTML stripped, and optionally, with all Unicode converted to 7 bit ASCII. Currently it does support threading and image URLs; future additions could include TLS/SSL support, inline HTML, and even posting via SMTP.
-<img src="screenshots/mop3-win.png" alt="Outlook Express displaying Mastodon posts" width="800"/>
+MOP3 is a toy-ish, standards complient-ish server that speaks POP3/SMTP which serves data from your home Mastodon timeline. This enables email clients from as early as the 1980s and as recent as today to receive, send, and reply to Mastodon posts (including images). This was started as a retro-computing project, however I've used it as my main client during development, as even modern email clients like Apple's Mail.app and Windows Mail support POP3 and SMTP. MOP3 can be configured to encode posts in Unicode or ASCII, with or without HTML, and images either as links, or attachments.
 
+<img src="screenshots/mop3-win.png" alt="Outlook Express displaying Mastodon posts" width="500"/>
+<img src="screenshots/mop3-linux.png" alt="Sylpheed on Linux" width="500"/>
 
 ## Installation
-This is written in Rust, so running `cargo install mop3` on your host should install it. If not, downloading the repo and running `cargo build` should also work. Binaries can be provided if desired, just drop me a line.
+Binaries are available for Windows, Mac, and Linux on the releases page. This is written in Rust, so running `cargo install mop3` on your host should install it. If not, downloading the repo and running `cargo build` should also work. 
 
 ## Usage
-This requires an access token, which can be obtained in Preferences -> Development -> New Application on your Mastodon instance. MOP3 only requires read permissions, so I reccomend not giving it any of the other ones. The client key and secret are not required.
+This requires an access token, which can be obtained in Preferences -> Development -> New Application on your Mastodon account. The client key and secret are _not_ required.
 
-`mop3 --help` will give you all of the important runtime flags, none of which are required, but `--token` can be especially useful if you don't want to type in your access token on your retro machine. By default the server binds to localhost, port 110. To enable connections from other clients, pass the option `--address 0.0.0.0:110`.
+`mop3 --help` will give you all of the important runtime flags. None are required, but `--token` is reccomended to avoid sending your access token over TCP, and required for posting since SMTP authentication is not implemented. I reccomend the `--ascii` flag for retro clients, and `--html --inline` for modern clients.
 
-To connect to it, point your client at the server ip/port, with the username of "username@mastoinstance.com" and the password of your account token, no SSL/TLS/SPA. Some clients will not include the domain name in the username by default, so make sure it includes both parts, or use `--user`.
+To connect to it, point your client at the server ip/port, set the username to "username@instance.com", the password to your account token, and disable SSL/TLS/SPA/SMTP authentication. If `--token` is used, the password can be anything. Some clients will not include the domain name in the username by default, so make sure it includes both parts, and use `--user` if all else fails.
 
-On the first connection, MOP3 will fetch the last 40 posts on your timeline, and all posts since the last time it connected on every subsequent connection. 
-It can't differentiate between clients, so the server will need to be restarted to refetch posts on a new client.
+I strongly reccomend turning OFF "Include Original Message"/"Inline reply" and similar settings in your client, as it is very difficult to parse when the reply ends and the original message starts, and the parsing code will often post headers in your mastodon message by mistake.
+
+On the first connection, MOP3 will fetch the last 40 posts on your timeline. On every subsequent connection, it will only fetch the posts that have been uploaded since the last connection. This can't differentiate between clients, so the server will need to be restarted to refetch posts on a new client.
 <img src="screenshots/mop3-mac.png" alt="Mail.app displaying Mastodon posts" width="800"/>
 
 ## Disclaimer

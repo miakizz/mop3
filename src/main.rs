@@ -83,9 +83,9 @@ struct Args {
    /// Only send ASCII to clients, gracefully converts unicode
    #[arg(long)]
     ascii: bool,
-   /// Enables smtp server for posting/replying to toots
+   /// Disables SMTP, posts can only be received, not sent
     #[arg(long)]
-    smtp: bool,
+    nosmtp: bool,
    /// Enables adding images as binary attachments, don't use with --inline
     #[arg(long)]
     attachment: bool,
@@ -99,7 +99,7 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    if args.smtp{
+    if !args.nosmtp{
         if args.token.as_deref().is_none(){
             println!("Error: Must provide token to use SMTP server,");
             println!("since I was too lazy to implement SMTP auth.");
