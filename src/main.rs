@@ -152,7 +152,7 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
     if args.token.as_deref().is_some(){
         new_cred.password = args.token.as_deref()?.to_string();
     }
-    let (account_domain,account_url) = strip_cred(new_cred.username);
+    let (account_domain,account_url) = strip_cred(&new_cred.username);
     
     let client = Client::new();
     
@@ -344,9 +344,9 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args){
             SMTPCommand::Data(email_string) => {
                 println!("{}", from);
                 let (_,account_url) = if args.account.as_deref().is_some(){
-                    strip_cred(args.account.as_deref().unwrap().to_string())
+                    strip_cred(args.account.as_deref().unwrap())
                 } else {
-                    strip_cred(from.clone())
+                    strip_cred(&from)
                 };
                 let auth = string_concat!("Bearer ", args.token.as_deref().unwrap().to_string());
                 let msg = Message::parse(email_string.as_bytes()).expect("Error in parsing email");
@@ -558,12 +558,15 @@ fn get_smtp_command(mut stream: TcpStream) -> SMTPCommand {
     }
 }
 
-//returns instance url and user address
-fn strip_cred(mut username: String) -> (String,String){
+//returns account domain and instance url
+fn strip_cred(username: &str) -> (String,String){
     //We only want the server domain, strip the account name
-    if username.contains('@'){
-        username = username.rsplit_once('@').unwrap().1.to_owned();
+    let username = if username.contains('@'){
+        username.rsplit_once('@').unwrap().1.to_owned()
     }
+    else {
+        username.to_owned()
+    };
     //and add the protocol
     let username_domain = if !username.contains("https://"){
          String::from("https://") + &username
@@ -577,6 +580,6 @@ mod tests {
 
     #[test]
     fn test_strip_cred() {
-        assert_eq!(strip_cred("user@example.com".to_string()), ("example.com".to_string(), "https://example.com".to_string()))
+        assert_eq!(strip_cred("user@example.com"), ("example.com".to_string(), "https://example.com".to_string()))
     }
 }
