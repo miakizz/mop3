@@ -7,7 +7,7 @@ use std::{
 
 use reqwest::blocking::{Client, multipart::Part, multipart::Form};
 use serde_json::Value;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use string_concat::*;
 use html2text::from_read;
 use chrono::DateTime;
@@ -32,6 +32,15 @@ struct Status{
     in_reply_to_id: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     media_ids: Vec<String>
+}
+
+/// Data returned from verify credentials call
+///
+/// <https://docs.joinmastodon.org/methods/accounts/#verify_credentials>
+#[derive(Deserialize)]
+struct CredentialAccount {
+    display_name: String,
+    username: String,
 }
 
 #[derive(Debug)]
@@ -157,14 +166,12 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
     let client = Client::new();
     
     //Verify account and get user's display name
-    let account_str = client
+    let account: CredentialAccount = client
         .get(string_concat!(account_url, "/api/v1/accounts/verify_credentials"))
         .header("Authorization", "Bearer ".to_owned() + &new_cred.password)
-        .send().expect("Could not verify credentials").text().unwrap();
-    let account: Value = serde_json::from_str(&account_str).expect("Server sent malformed JSON");
-    
-    let account_disp_name = get_str(&account["display_name"]);
-    let account_addr = string_concat!(get_str(&account["username"]), "@", account_domain);
+        .send().expect("Could not verify credentials").json().unwrap();
+
+    let account_addr = format!("{}@{}", account.username, account_domain);
     
     //Get timeline
     let since_id = if recent_id.is_empty() {
@@ -223,7 +230,7 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
         //oh lawd he comin
         let mut message = MessageBuilder::new()
             .from((get_str(&post["account"]["display_name"]),get_str(&post["account"]["acct"])))
-            .to((account_disp_name.to_string(),account_addr.clone()))
+            .to((account.display_name.clone(),account_addr.clone()))
             .subject(subject)
             //Fun fact: this line of code is 181 characters long
             .date(DateTime::<Utc>::from_utc(NaiveDateTime::parse_from_str(get_str(&post["created_at"]), "%Y-%m-%dT%H:%M:%S%.3fZ").expect("Server sent unexpected time format"), Utc).timestamp())
