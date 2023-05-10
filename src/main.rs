@@ -570,3 +570,13 @@ fn strip_cred(mut username: String) -> (String,String){
     } else {username.clone()};
     (username, username_domain)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strip_cred() {
+        assert_eq!(strip_cred("user@example.com".to_string()), ("example.com".to_string(), "https://example.com".to_string()))
+    }
+}
