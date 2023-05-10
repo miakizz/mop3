@@ -561,15 +561,10 @@ fn get_smtp_command(mut stream: TcpStream) -> SMTPCommand {
 //returns account domain and instance url
 fn strip_cred(username: &str) -> (String,String){
     //We only want the server domain, strip the account name
-    let username = if username.contains('@'){
-        username.rsplit_once('@').unwrap().1.to_owned()
-    }
-    else {
-        username.to_owned()
-    };
+    let username = username.rsplit_once('@').map(|parts| parts.1).unwrap_or(username).to_owned();
     //and add the protocol
     let username_domain = if !username.contains("https://"){
-         String::from("https://") + &username
+        format!("https://{}", username)
     } else {username.clone()};
     (username, username_domain)
 }
