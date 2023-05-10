@@ -139,7 +139,7 @@ fn smtp_setup(){
 fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: String) -> Option<String> {
     stream.write_all("+OK MOP3 ready\r\n".as_bytes()).expect("Couldn't send welcome message");
 
-    let new_cred_res = get_login(stream.try_clone().expect("Couldn't clone stream :("));
+    let new_cred_res = get_login(&mut stream);
     //Make sure we didn't drop the connection
     let mut new_cred = match new_cred_res {
         Some(cred) => cred,
@@ -254,7 +254,7 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
     //process commands as we get them
     loop{
         //what if we kissed in The TRANSACTION State
-        match get_pop_command(stream.try_clone().unwrap()){
+        match get_pop_command(&mut stream){
             POPCommand::List(index) => {
                 let i = index as usize;
                 if i != 0 {
@@ -439,10 +439,10 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args){
 }
 
 //This is only used in POP3, basically a mini state machine that won't let you do anything before logging in
-fn get_login(stream: TcpStream) -> Option<Cred> {
+fn get_login(stream: &mut TcpStream) -> Option<Cred> {
     let mut new_cred = Cred{username: String::new(), password: String::new()};
     loop{
-        match get_pop_command(stream.try_clone().unwrap()){
+        match get_pop_command(stream){
             POPCommand::User(x) => new_cred.username = x,
             POPCommand::Pass(x) => new_cred.password = x,
             POPCommand::Disconnect | POPCommand::Quit => return None,
@@ -459,7 +459,7 @@ fn get_str(element: &Value) -> &str {
     element.as_str().unwrap_or_else(|| {println!("Could not parse JSON element: {:?}", element); ""})
 }
 
-fn get_pop_command(mut stream: TcpStream) -> POPCommand {
+fn get_pop_command(stream: &mut TcpStream) -> POPCommand {
     let mut tcp_read = BufReader::new(stream.try_clone().unwrap());
     let mut cur_line = vec![];
     loop {
