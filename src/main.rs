@@ -54,7 +54,7 @@ enum SMTPCommand{
 //A little hacky?
 macro_rules! send_str{
     ($stream:expr,$msg:expr) => {
-        if $stream.write_all($msg.as_bytes()).is_ok(){Some(())} else {None}
+        $stream.write_all($msg.as_bytes()).ok()
     };
 }
 
