@@ -100,13 +100,13 @@ struct Args {
 fn main() {
     let args = Args::parse();
     if !args.nosmtp{
-        if args.token.as_deref().is_none(){
+        if args.token.is_none(){
             println!("Error: Must provide token to use SMTP server,");
             println!("since I was too lazy to implement SMTP auth.");
             println!("If this is an issue, please let me know.");
             return;
         }
-        thread::spawn(|| {smtp_setup()});
+        thread::spawn(smtp_setup);
     }
     //Most recent ID fetched, passed to API call to reduce server load
     let mut recent = "".to_string();
@@ -197,7 +197,7 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
         };
         //De-HTML-ify content if requested
         if !args.html {
-            content = from_read(content.as_bytes(),78).replace("\n", "\r\n");
+            content = from_read(content.as_bytes(),78).replace('\n', "\r\n");
         }
         //Get URLs of any media, and either append them as text, or download images into a Vec
         let media_urls = media_vec.as_array().expect("Server sent malformed JSON (no media array)");
@@ -206,7 +206,7 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
             for media in media_urls{
                 //Extract info from the JSON response and fetch image
                 let img = client.get(get_str(&media["url"])).send().expect("Couldn't get image");
-                let filename = get_str(&media["url"]).split("/").last().unwrap().to_string();
+                let filename = get_str(&media["url"]).split('/').last().unwrap().to_string();
                 let mime = img.headers().get("Content-Type").unwrap().to_str().unwrap().to_string();
                 let img_data = img.bytes().unwrap().clone().to_owned();
                 attachments.push(Attachment{
@@ -367,14 +367,12 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args){
                 //If it's including the original message, disable including original replies in your email client
                 let reply_pattern = Regex::new(r"-*\s*(On\s.+\s.+\n?wrote:{0,1})\s{0,1}-*$").unwrap();
                 if !reply_id.is_empty(){
-                    match reply_pattern.find(&status){
-                        Some(ind) => status = status.split_at(ind.0).0.to_string(),
-                        //do nothing if none
-                        None => (),
-                    }    
+                    if let Some(ind) = reply_pattern.find(&status) {
+                        status = status.split_at(ind.0).0.to_string()
+                    }
                 }
                 //Strip whitespace and inline image markers from the end of status
-                status = status.replace("\u{FFFC}", ""); 
+                status = status.replace('\u{FFFC}', "");
                 status = status.trim_end().to_string();
                 //Some clients will add the domain to IDs, so strip that
                 if reply_id.contains('@'){
@@ -389,11 +387,11 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args){
                         let bigtype = attachment.content_type().expect("Error parsing attachment content type").ctype();
                         let subtype = attachment.content_type().expect("Error parsing attachment content type").subtype().unwrap_or("JPG");
                         let mime = string_concat!(bigtype, "/", subtype);
-                        let name = attachment.attachment_name().unwrap_or("Untitled.jpg").clone().to_owned();
+                        let name = attachment.attachment_name().unwrap_or("Untitled.jpg").to_owned();
                         println!("Attachment Name: {:?}", name);
                         println!("Attachment Type: {:?}", mime);
                         //std::fs::write(attachment.attachment_name().unwrap_or("Untitled"), attachment.contents());
-                        let content = attachment.contents().clone().to_owned();
+                        let content = attachment.contents().to_owned();
                         
                         //Upload the image, we are given an ID in the reply which needs to be included in the post
                         let file_part = Part::bytes(content)
@@ -407,7 +405,7 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args){
                             .multipart(form)
                             .send().expect("Error uploading image").text().unwrap();
                         let ret_vec:Value = serde_json::from_str(&upload_res).expect("Image upload failure");
-                        let cur_id = get_str(&ret_vec["id"]).clone().to_owned();
+                        let cur_id = get_str(&ret_vec["id"]).to_owned();
                         media_ids.push(cur_id);
                     }
                 }
@@ -458,9 +456,7 @@ fn get_login(stream: TcpStream) -> Option<Cred> {
 
 //The JSON array wasn't given a struct bc I Am Lazy, so this is a helper function to get a string out of a JSON element
 fn get_str(element: &Value) -> &str {
-    let str_option = element.as_str();
-    if str_option.is_some() {return str_option.unwrap().clone();}
-    else {println!("Could not parse JSON element: {:?}", element); return "";}
+    element.as_str().unwrap_or_else(|| {println!("Could not parse JSON element: {:?}", element); ""})
 }
 
 fn get_pop_command(mut stream: TcpStream) -> POPCommand {
@@ -521,10 +517,10 @@ fn get_smtp_command(mut stream: TcpStream) -> SMTPCommand {
         let cur_line = String::from_utf8_lossy(&cur_line_bytes);
         if cur_line.starts_with("MAIL FROM:"){
             send_str!(stream, "250 OK\r\n");
-            return SMTPCommand::Mailfrom(re.captures(&cur_line).unwrap().at(0).as_deref().unwrap().to_string());
+            return SMTPCommand::Mailfrom(re.captures(&cur_line).unwrap().at(0).unwrap().to_string());
         } else if cur_line.starts_with("RCPT TO:"){
             send_str!(stream, "250 OK\r\n");
-            return SMTPCommand::RcptTo(re.captures(&cur_line).unwrap().at(0).as_deref().unwrap().to_string());
+            return SMTPCommand::RcptTo(re.captures(&cur_line).unwrap().at(0).unwrap().to_string());
         } else if cur_line.starts_with("DATA"){
             send_str!(stream, "354 Send message content\r\n");
             let mut ret = "".to_string();
@@ -572,5 +568,5 @@ fn strip_cred(mut username: String) -> (String,String){
     let username_domain = if !username.contains("https://"){
          String::from("https://") + &username
     } else {username.clone()};
-    return (username, username_domain);
+    (username, username_domain)
 }
