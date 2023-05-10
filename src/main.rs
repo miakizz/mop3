@@ -116,6 +116,9 @@ struct Args {
     /// Disables SMTP, posts can only be received, not sent
     #[arg(long)]
     nosmtp: bool,
+    /// Enables SMTP, ignored since it is now the default
+    #[arg(long,hide=true)]
+    smtp: bool,
     /// Enables adding images as binary attachments, don't use with --inline
     #[arg(long)]
     attachment: bool,
