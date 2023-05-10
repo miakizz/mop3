@@ -14,7 +14,7 @@ This requires an access token, which can be obtained in Preferences -> Developme
 
 `mop3 --help` will give you all of the important runtime flags. None are required, but `--token` is reccomended to avoid sending your access token over TCP, and required for posting since SMTP authentication is not implemented. I reccomend the `--ascii` flag for retro clients, and `--html --inline` for modern clients.
 
-To connect to it, point your client at the server ip/port, set the username to "username@instance.com", the password to your account token, and disable SSL/TLS/SPA/SMTP authentication. If `--token` is used, the password can be anything. Some clients will not include the domain name in the username by default, so make sure it includes both parts, and use `--user` if all else fails.
+To connect to it, point your client at the server ip/port, set the username to "username@instance.com", the password to your account token, and disable SSL/TLS/SPA/SMTP authentication. If `--token` is used, the password can be anything. Some clients will not include the domain name in the username by default, so make sure it includes both parts, and use `--account` if all else fails.
 
 I strongly reccomend turning OFF "Include Original Message"/"Inline reply" and similar settings in your client, as it is very difficult to parse when the reply ends and the original message starts, and the parsing code will often post headers in your mastodon message by mistake.
 

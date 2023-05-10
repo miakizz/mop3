@@ -175,7 +175,7 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
     let mut timeline_str = client
         .get(account_url + "/api/v1/timelines/home?limit=40" + &since_id)
         .header("Authorization", "Bearer ".to_owned() + &new_cred.password)
-        .send().expect("Could not retreive timeline").text().unwrap();
+        .send().expect("Could not retrieve timeline").text().unwrap();
     if args.ascii {timeline_str = deunicode(&timeline_str);}
     //println!("{}", timeline_str);
     let timeline: Vec<Value> = serde_json::from_str(&timeline_str).expect("Server sent malformed JSON");
