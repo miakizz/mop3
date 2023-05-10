@@ -167,20 +167,16 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
     
     //Verify account and get user's display name
     let account: CredentialAccount = client
-        .get(string_concat!(account_url, "/api/v1/accounts/verify_credentials"))
+        .get(format!("{account_url}/api/v1/accounts/verify_credentials"))
         .header("Authorization", "Bearer ".to_owned() + &new_cred.password)
         .send().expect("Could not verify credentials").json().unwrap();
 
     let account_addr = format!("{}@{}", account.username, account_domain);
     
     //Get timeline
-    let since_id = if recent_id.is_empty() {
-        "".to_string()
-    } else {
-        string_concat!("&since_id=".to_owned() , recent_id)
-    };
+    let since_id = (!recent_id.is_empty()).then(|| format!("&since_id={recent_id}")).unwrap_or_default();
     let mut timeline_str = client
-        .get(account_url + "/api/v1/timelines/home?limit=40" + &since_id)
+        .get(format!("{account_url}/api/v1/timelines/home?limit=40{since_id}"))
         .header("Authorization", "Bearer ".to_owned() + &new_cred.password)
         .send().expect("Could not retrieve timeline").text().unwrap();
     if args.ascii {timeline_str = deunicode(&timeline_str);}
