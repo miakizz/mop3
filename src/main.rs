@@ -7,7 +7,7 @@ use std::{
 
 use reqwest::blocking::{Client, multipart::Part, multipart::Form};
 use serde_json::Value;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use string_concat::*;
 use html2text::from_read;
 use chrono::DateTime;
@@ -34,6 +34,15 @@ struct Status{
     media_ids: Vec<String>
 }
 
+/// Data returned from verify credentials call
+///
+/// <https://docs.joinmastodon.org/methods/accounts/#verify_credentials>
+#[derive(Deserialize)]
+struct CredentialAccount {
+    display_name: String,
+    username: String,
+}
+
 #[derive(Debug)]
 struct Attachment{
     filename: String,
@@ -54,7 +63,7 @@ enum SMTPCommand{
 //A little hacky?
 macro_rules! send_str{
     ($stream:expr,$msg:expr) => {
-        if $stream.write_all($msg.as_bytes()).is_ok(){Some(())} else {None}
+        $stream.write_all($msg.as_bytes()).ok()
     };
 }
 
@@ -100,13 +109,13 @@ struct Args {
 fn main() {
     let args = Args::parse();
     if !args.nosmtp{
-        if args.token.as_deref().is_none(){
+        if args.token.is_none(){
             println!("Error: Must provide token to use SMTP server,");
             println!("since I was too lazy to implement SMTP auth.");
             println!("If this is an issue, please let me know.");
             return;
         }
-        thread::spawn(|| {smtp_setup()});
+        thread::spawn(smtp_setup);
     }
     //Most recent ID fetched, passed to API call to reduce server load
     let mut recent = "".to_string();
@@ -139,7 +148,7 @@ fn smtp_setup(){
 fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: String) -> Option<String> {
     stream.write_all("+OK MOP3 ready\r\n".as_bytes()).expect("Couldn't send welcome message");
 
-    let new_cred_res = get_login(stream.try_clone().expect("Couldn't clone stream :("));
+    let new_cred_res = get_login(&mut stream);
     //Make sure we didn't drop the connection
     let mut new_cred = match new_cred_res {
         Some(cred) => cred,
@@ -152,30 +161,24 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
     if args.token.as_deref().is_some(){
         new_cred.password = args.token.as_deref()?.to_string();
     }
-    let (account_domain,account_url) = strip_cred(new_cred.username);
+    let (account_domain,account_url) = strip_cred(&new_cred.username);
     
     let client = Client::new();
     
     //Verify account and get user's display name
-    let account_str = client
-        .get(string_concat!(account_url, "/api/v1/accounts/verify_credentials"))
+    let account: CredentialAccount = client
+        .get(format!("{account_url}/api/v1/accounts/verify_credentials"))
         .header("Authorization", "Bearer ".to_owned() + &new_cred.password)
-        .send().expect("Could not verify credentials").text().unwrap();
-    let account: Value = serde_json::from_str(&account_str).expect("Server sent malformed JSON");
-    
-    let account_disp_name = get_str(&account["display_name"]);
-    let account_addr = string_concat!(get_str(&account["username"]), "@", account_domain);
+        .send().expect("Could not verify credentials").json().unwrap();
+
+    let account_addr = format!("{}@{}", account.username, account_domain);
     
     //Get timeline
-    let since_id = if recent_id.is_empty() {
-        "".to_string()
-    } else {
-        string_concat!("&since_id=".to_owned() , recent_id)
-    };
+    let since_id = (!recent_id.is_empty()).then(|| format!("&since_id={recent_id}")).unwrap_or_default();
     let mut timeline_str = client
-        .get(account_url + "/api/v1/timelines/home?limit=40" + &since_id)
+        .get(format!("{account_url}/api/v1/timelines/home?limit=40{since_id}"))
         .header("Authorization", "Bearer ".to_owned() + &new_cred.password)
-        .send().expect("Could not retreive timeline").text().unwrap();
+        .send().expect("Could not retrieve timeline").text().unwrap();
     if args.ascii {timeline_str = deunicode(&timeline_str);}
     //println!("{}", timeline_str);
     let timeline: Vec<Value> = serde_json::from_str(&timeline_str).expect("Server sent malformed JSON");
@@ -197,7 +200,7 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
         };
         //De-HTML-ify content if requested
         if !args.html {
-            content = from_read(content.as_bytes(),78).replace("\n", "\r\n");
+            content = from_read(content.as_bytes(),78).replace('\n', "\r\n");
         }
         //Get URLs of any media, and either append them as text, or download images into a Vec
         let media_urls = media_vec.as_array().expect("Server sent malformed JSON (no media array)");
@@ -206,7 +209,7 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
             for media in media_urls{
                 //Extract info from the JSON response and fetch image
                 let img = client.get(get_str(&media["url"])).send().expect("Couldn't get image");
-                let filename = get_str(&media["url"]).split("/").last().unwrap().to_string();
+                let filename = get_str(&media["url"]).split('/').last().unwrap().to_string();
                 let mime = img.headers().get("Content-Type").unwrap().to_str().unwrap().to_string();
                 let img_data = img.bytes().unwrap().clone().to_owned();
                 attachments.push(Attachment{
@@ -223,7 +226,7 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
         //oh lawd he comin
         let mut message = MessageBuilder::new()
             .from((get_str(&post["account"]["display_name"]),get_str(&post["account"]["acct"])))
-            .to((account_disp_name.to_string(),account_addr.clone()))
+            .to((account.display_name.clone(),account_addr.clone()))
             .subject(subject)
             //Fun fact: this line of code is 181 characters long
             .date(DateTime::<Utc>::from_utc(NaiveDateTime::parse_from_str(get_str(&post["created_at"]), "%Y-%m-%dT%H:%M:%S%.3fZ").expect("Server sent unexpected time format"), Utc).timestamp())
@@ -254,7 +257,7 @@ fn handle_pop_connection(args: &Args, mut stream: TcpStream, mut recent_id: Stri
     //process commands as we get them
     loop{
         //what if we kissed in The TRANSACTION State
-        match get_pop_command(stream.try_clone().unwrap()){
+        match get_pop_command(&mut stream){
             POPCommand::List(index) => {
                 let i = index as usize;
                 if i != 0 {
@@ -344,9 +347,9 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args){
             SMTPCommand::Data(email_string) => {
                 println!("{}", from);
                 let (_,account_url) = if args.account.as_deref().is_some(){
-                    strip_cred(args.account.as_deref().unwrap().to_string())
+                    strip_cred(args.account.as_deref().unwrap())
                 } else {
-                    strip_cred(from.clone())
+                    strip_cred(&from)
                 };
                 let auth = string_concat!("Bearer ", args.token.as_deref().unwrap().to_string());
                 let msg = Message::parse(email_string.as_bytes()).expect("Error in parsing email");
@@ -367,14 +370,12 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args){
                 //If it's including the original message, disable including original replies in your email client
                 let reply_pattern = Regex::new(r"-*\s*(On\s.+\s.+\n?wrote:{0,1})\s{0,1}-*$").unwrap();
                 if !reply_id.is_empty(){
-                    match reply_pattern.find(&status){
-                        Some(ind) => status = status.split_at(ind.0).0.to_string(),
-                        //do nothing if none
-                        None => (),
-                    }    
+                    if let Some(ind) = reply_pattern.find(&status) {
+                        status = status.split_at(ind.0).0.to_string()
+                    }
                 }
                 //Strip whitespace and inline image markers from the end of status
-                status = status.replace("\u{FFFC}", ""); 
+                status = status.replace('\u{FFFC}', "");
                 status = status.trim_end().to_string();
                 //Some clients will add the domain to IDs, so strip that
                 if reply_id.contains('@'){
@@ -389,11 +390,11 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args){
                         let bigtype = attachment.content_type().expect("Error parsing attachment content type").ctype();
                         let subtype = attachment.content_type().expect("Error parsing attachment content type").subtype().unwrap_or("JPG");
                         let mime = string_concat!(bigtype, "/", subtype);
-                        let name = attachment.attachment_name().unwrap_or("Untitled.jpg").clone().to_owned();
+                        let name = attachment.attachment_name().unwrap_or("Untitled.jpg").to_owned();
                         println!("Attachment Name: {:?}", name);
                         println!("Attachment Type: {:?}", mime);
                         //std::fs::write(attachment.attachment_name().unwrap_or("Untitled"), attachment.contents());
-                        let content = attachment.contents().clone().to_owned();
+                        let content = attachment.contents().to_owned();
                         
                         //Upload the image, we are given an ID in the reply which needs to be included in the post
                         let file_part = Part::bytes(content)
@@ -407,7 +408,7 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args){
                             .multipart(form)
                             .send().expect("Error uploading image").text().unwrap();
                         let ret_vec:Value = serde_json::from_str(&upload_res).expect("Image upload failure");
-                        let cur_id = get_str(&ret_vec["id"]).clone().to_owned();
+                        let cur_id = get_str(&ret_vec["id"]).to_owned();
                         media_ids.push(cur_id);
                     }
                 }
@@ -441,10 +442,10 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args){
 }
 
 //This is only used in POP3, basically a mini state machine that won't let you do anything before logging in
-fn get_login(stream: TcpStream) -> Option<Cred> {
+fn get_login(stream: &mut TcpStream) -> Option<Cred> {
     let mut new_cred = Cred{username: String::new(), password: String::new()};
     loop{
-        match get_pop_command(stream.try_clone().unwrap()){
+        match get_pop_command(stream){
             POPCommand::User(x) => new_cred.username = x,
             POPCommand::Pass(x) => new_cred.password = x,
             POPCommand::Disconnect | POPCommand::Quit => return None,
@@ -458,12 +459,10 @@ fn get_login(stream: TcpStream) -> Option<Cred> {
 
 //The JSON array wasn't given a struct bc I Am Lazy, so this is a helper function to get a string out of a JSON element
 fn get_str(element: &Value) -> &str {
-    let str_option = element.as_str();
-    if str_option.is_some() {return str_option.unwrap().clone();}
-    else {println!("Could not parse JSON element: {:?}", element); return "";}
+    element.as_str().unwrap_or_else(|| {println!("Could not parse JSON element: {:?}", element); ""})
 }
 
-fn get_pop_command(mut stream: TcpStream) -> POPCommand {
+fn get_pop_command(stream: &mut TcpStream) -> POPCommand {
     let mut tcp_read = BufReader::new(stream.try_clone().unwrap());
     let mut cur_line = vec![];
     loop {
@@ -521,10 +520,10 @@ fn get_smtp_command(mut stream: TcpStream) -> SMTPCommand {
         let cur_line = String::from_utf8_lossy(&cur_line_bytes);
         if cur_line.starts_with("MAIL FROM:"){
             send_str!(stream, "250 OK\r\n");
-            return SMTPCommand::Mailfrom(re.captures(&cur_line).unwrap().at(0).as_deref().unwrap().to_string());
+            return SMTPCommand::Mailfrom(re.captures(&cur_line).unwrap().at(0).unwrap().to_string());
         } else if cur_line.starts_with("RCPT TO:"){
             send_str!(stream, "250 OK\r\n");
-            return SMTPCommand::RcptTo(re.captures(&cur_line).unwrap().at(0).as_deref().unwrap().to_string());
+            return SMTPCommand::RcptTo(re.captures(&cur_line).unwrap().at(0).unwrap().to_string());
         } else if cur_line.starts_with("DATA"){
             send_str!(stream, "354 Send message content\r\n");
             let mut ret = "".to_string();
@@ -562,15 +561,23 @@ fn get_smtp_command(mut stream: TcpStream) -> SMTPCommand {
     }
 }
 
-//returns instance url and user address
-fn strip_cred(mut username: String) -> (String,String){
+//returns account domain and instance url
+fn strip_cred(username: &str) -> (String,String){
     //We only want the server domain, strip the account name
-    if username.contains('@'){
-        username = username.rsplit_once('@').unwrap().1.to_owned();
-    }
+    let username = username.rsplit_once('@').map(|parts| parts.1).unwrap_or(username).to_owned();
     //and add the protocol
     let username_domain = if !username.contains("https://"){
-         String::from("https://") + &username
+        format!("https://{}", username)
     } else {username.clone()};
-    return (username, username_domain);
+    (username, username_domain)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strip_cred() {
+        assert_eq!(strip_cred("user@example.com"), ("example.com".to_string(), "https://example.com".to_string()))
+    }
 }
