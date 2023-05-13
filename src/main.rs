@@ -148,7 +148,7 @@ fn main() {
     let mut recent = "".to_string();
     let account = (
         args.address.as_deref().unwrap_or("127.0.0.1"),
-        args.pop3port.unwrap_or(1100),
+        args.pop3port.unwrap_or(110),
     );
     println!("Listening on {:?}", account);
     loop {
@@ -165,7 +165,7 @@ fn smtp_setup() {
     let args = Args::parse();
     let smtp_addr = (
         args.address.as_deref().unwrap_or("127.0.0.1"),
-        args.smtpport.unwrap_or(2500),
+        args.smtpport.unwrap_or(25),
     );
     println!("Listening for SMTP on {:?}", smtp_addr);
     loop {
