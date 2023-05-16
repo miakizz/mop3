@@ -10,13 +10,44 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  Ubuntu:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v3
     - name: Build
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
+    - name: Upload Artifact
+      uses: actions/upload-artifact@master
+      with:
+        name: mop3-ubuntu
+        path: ./mop3
+
+  Windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+    - name: Upload Artifact
+      uses: actions/upload-artifact@master
+      with:
+        name: mop3-windows
+        path: ./mop3.exe
+      
+  Mac:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+    - name: Upload Artifact
+      uses: actions/upload-artifact@master
+      with:
+        name: mop3-mac
+        path: ./mop3
