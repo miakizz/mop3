@@ -209,15 +209,15 @@ fn handle_pop_connection(
         .send()
         .expect("Could not verify credentials")
         .json()
-        .unwrap();
-
+        .expect("Could not parse credentials, your token is likely invalid, or your are sending a token from one server on another one.");
+    
     let account_addr = format!("{}@{}", account.username, account_domain);
 
     //Get timeline
     let since_id = (!recent_id.is_empty())
         .then(|| format!("&since_id={recent_id}"))
         .unwrap_or_default();
-    let mut timeline_str = client
+    let timeline_str = client
         .get(format!(
             "{account_url}/api/v1/timelines/home?limit=40{since_id}"
         ))
@@ -228,9 +228,6 @@ fn handle_pop_connection(
         .unwrap();
     if args.debug {
         println!("{}", timeline_str);
-    }
-    if args.ascii {
-        timeline_str = deunicode(&timeline_str);
     }
     //println!("{}", timeline_str);
     let timeline: Vec<Value> =
@@ -246,13 +243,13 @@ fn handle_pop_connection(
             (
                 get_str(&post["reblog"]["content"]).to_string(),
                 &post["reblog"]["media_attachments"],
-                "Boost",
+                string_concat!("Boost from ", get_str(&post["reblog"]["account"]["display_name"]))
             )
         } else {
             (
                 get_str(&post["content"]).to_string(),
                 &post["media_attachments"],
-                "Post",
+                "Post".to_string(),
             )
         };
         //De-HTML-ify content if requested
@@ -348,8 +345,11 @@ fn handle_pop_connection(
                 );
             }
         }
-        let message = string_concat!(message.write_to_string().unwrap(), "\r\n");
+        let mut message = string_concat!(message.write_to_string().unwrap(), "\r\n");
         //std::fs::write("debug", &message).expect("Could not write debug file");
+        if args.ascii {
+            message = deunicode(&message);
+        }
         post_size += message.len();
         emails.push(message);
     }
