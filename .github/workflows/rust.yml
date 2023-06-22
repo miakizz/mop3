@@ -17,7 +17,7 @@ jobs:
     - name: Build
       run: cargo build --release
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --release
     - name: Upload Artifact
       uses: actions/upload-artifact@master
       with:
@@ -31,7 +31,7 @@ jobs:
     - name: Build
       run: cargo build --release
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --release
     - name: Upload Artifact
       uses: actions/upload-artifact@master
       with:
@@ -45,7 +45,7 @@ jobs:
     - name: Build
       run: cargo build --release
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --release
     - name: Upload Artifact
       uses: actions/upload-artifact@master
       with:
