@@ -22,7 +22,7 @@ jobs:
       uses: actions/upload-artifact@master
       with:
         name: mop3-ubuntu
-        path: ./target/debug/mop3
+        path: ./target/release/mop3
 
   Windows:
     runs-on: windows-latest
@@ -36,7 +36,7 @@ jobs:
       uses: actions/upload-artifact@master
       with:
         name: mop3-windows
-        path: ./target/debug/mop3.exe
+        path: ./target/release/mop3.exe
       
   Mac:
     runs-on: macos-latest
@@ -50,4 +50,4 @@ jobs:
       uses: actions/upload-artifact@master
       with:
         name: mop3-mac
-        path: ./target/debug/mop3
+        path: ./target/release/mop3
