@@ -131,6 +131,9 @@ struct Args {
     /// Debug mode, currently just prints out the JSON of the timeline
     #[arg(long)]
     debug: bool,
+    /// Include the URL of the original post in the email
+    #[arg(long)]
+    url: bool,
 }
 
 fn main() {
@@ -239,17 +242,19 @@ fn handle_pop_connection(
     for post in &timeline {
         println!("{}", get_str(&post["created_at"]));
         //If this is a reblog, get text & images from the reblog
-        let (mut content, media_vec, subject) = if post["reblog"] != Value::Null {
+        let (mut content, media_vec, subject, url) = if post["reblog"] != Value::Null {
             (
                 get_str(&post["reblog"]["content"]).to_string(),
                 &post["reblog"]["media_attachments"],
-                string_concat!("Boost from ", get_str(&post["reblog"]["account"]["display_name"]))
+                string_concat!("Boost from ", get_str(&post["reblog"]["account"]["display_name"])),
+                get_str(&post["reblog"]["url"]),
             )
         } else {
             (
                 get_str(&post["content"]).to_string(),
                 &post["media_attachments"],
                 "Post".to_string(),
+                get_str(&post["url"]),
             )
         };
         //De-HTML-ify content if requested
@@ -294,6 +299,14 @@ fn handle_pop_connection(
             {
                 content = string_concat!(content, "\r\n", get_str(&media["url"]));
             }
+        }
+        //If requested, add the URL of the original post to the email
+        if args.url {
+            content = string_concat!(
+                content,
+                "\r\n",
+                url
+            );
         }
         //oh lawd he comin
         let mut message = MessageBuilder::new()
