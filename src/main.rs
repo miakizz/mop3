@@ -134,6 +134,9 @@ struct Args {
     /// Include the URL of the original post in the email
     #[arg(long)]
     url: bool,
+    /// Appends links in posts with a URL proxy. Does not change link text, so links still appears un-proxied. "http://frogfind.com/read.php?a=" works well.
+    #[arg(long)]
+    proxy: Option<String>,
 }
 
 fn main() {
@@ -257,6 +260,10 @@ fn handle_pop_connection(
                 get_str(&post["url"]),
             )
         };
+        //Replace links with proxy if requested
+        if args.proxy.is_some(){
+            content = content.to_string().replace("<a href=\"", &string_concat!(" <a href=\"", args.proxy.as_ref().unwrap()).to_owned());
+        }
         //De-HTML-ify content if requested
         if !args.html {
             content = from_read(content.as_bytes(), 78).replace('\n', "\r\n");
