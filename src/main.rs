@@ -145,9 +145,9 @@ fn main() {
     let args = Args::parse();
     if !args.nosmtp {
         if args.token.is_none() {
-            println!("Error: Must provide token to use SMTP server,");
-            println!("since I was too lazy to implement SMTP auth.");
-            println!("If this is an issue, please let me know.");
+            println!("Error: Must provide token to use SMTP server.");
+            println!("Either supply a token, or use --nosmtp and send it as the POP password.");
+            println!("For more information, run mop3 --help");
             return;
         }
         thread::spawn(smtp_setup);
@@ -160,12 +160,16 @@ fn main() {
     );
     println!("Listening on {:?}", account);
     loop {
+        println!("before listener");
         let listener = TcpListener::bind(account).unwrap();
+        println!("after listener");
         for stream in listener.incoming() {
             let stream = stream.unwrap();
+            println!("Connection from {:?}", stream.peer_addr().unwrap());
             if let Some(new_recent) = handle_pop_connection(&args, stream, recent.clone()) {
                 recent = new_recent;
             };
+            println!("looping");
         }
     }
 }
@@ -176,8 +180,8 @@ fn smtp_setup() {
         args.smtpport.unwrap_or(25),
     );
     println!("Listening for SMTP on {:?}", smtp_addr);
+    let smtp_listener = TcpListener::bind(smtp_addr).unwrap();
     loop {
-        let smtp_listener = TcpListener::bind(smtp_addr).unwrap();
         for stream in smtp_listener.incoming() {
             handle_smtp_connection(stream.unwrap(), &args);
         }
@@ -249,7 +253,7 @@ fn handle_pop_connection(
     for post in &timeline {
         println!("{}", get_str(&post["created_at"]));
         //If this is a reblog, get text & images from the reblog
-        let (mut content, media_vec, subject, url) = if post["reblog"] != Value::Null {
+        let (mut content, media_vec, mut subject, url) = if post["reblog"] != Value::Null {
             (
                 get_str(&post["reblog"]["content"]).to_string(),
                 &post["reblog"]["media_attachments"],
@@ -312,6 +316,12 @@ fn handle_pop_connection(
                 content = string_concat!(content, "\r\n", get_str(&media["url"]));
             }
         }
+        let mut display_name = get_str(&post["account"]["display_name"]).to_string();
+        if args.ascii {
+            content = deunicode(&content);
+            subject = deunicode(&subject);
+            display_name = deunicode(&display_name);
+        }
         //If requested, add the URL of the original post to the email
         if args.url {
             content = string_concat!(
@@ -323,7 +333,7 @@ fn handle_pop_connection(
         //oh lawd he comin
         let mut message = MessageBuilder::new()
             .from((
-                get_str(&post["account"]["display_name"]),
+                display_name.as_str(),
                 get_str(&post["account"]["acct"]),
             ))
             .to((account.display_name.clone(), account_addr.clone()))
@@ -370,11 +380,7 @@ fn handle_pop_connection(
                 );
             }
         }
-        let mut message = string_concat!(message.write_to_string().unwrap(), "\r\n");
-        //std::fs::write("debug", &message).expect("Could not write debug file");
-        if args.ascii {
-            message = deunicode(&message);
-        }
+        let message = string_concat!(message.write_to_string().unwrap(), "\r\n");
         post_size += message.len();
         emails.push(message);
     }
