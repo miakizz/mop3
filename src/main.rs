@@ -19,6 +19,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use string_concat::*;
 
+static USER_AGENT: &str = "mop3";
+
 #[derive(Debug)]
 struct Cred {
     username: String,
@@ -212,11 +214,12 @@ fn handle_pop_connection(
     let account: CredentialAccount = client
         .get(format!("{account_url}/api/v1/accounts/verify_credentials"))
         .header("Authorization", "Bearer ".to_owned() + &new_cred.password)
+        .header("User-Agent", USER_AGENT)
         .send()
         .expect("Could not verify credentials")
         .json()
         .expect("Could not parse credentials, your token is likely invalid, or your are sending a token from one server on another one.");
-    
+
     let account_addr = format!("{}@{}", account.username, account_domain);
 
     //Get timeline
@@ -228,6 +231,7 @@ fn handle_pop_connection(
             "{account_url}/api/v1/timelines/home?limit=40{since_id}"
         ))
         .header("Authorization", "Bearer ".to_owned() + &new_cred.password)
+        .header("User-Agent", USER_AGENT)
         .send()
         .expect("Could not retrieve timeline")
         .text()
@@ -278,6 +282,7 @@ fn handle_pop_connection(
                 //Extract info from the JSON response and fetch image
                 let img = client
                     .get(get_str(&media["url"]))
+                    .header("User-Agent", USER_AGENT)
                     .send()
                     .expect("Couldn't get image");
                 let filename = get_str(&media["url"])
@@ -562,6 +567,7 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args) {
                         let upload_res = client
                             .post(account_url.clone() + "/api/v2/media")
                             .header("Authorization", auth.clone())
+                            .header("User-Agent", USER_AGENT)
                             .multipart(form)
                             .send()
                             .expect("Error uploading image")
@@ -594,6 +600,7 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args) {
                     client
                         .post(account_url + "/api/v1/statuses")
                         .header("Authorization", auth.clone())
+                        .header("User-Agent", USER_AGENT)
                         .json(&form)
                         .send()
                 );
