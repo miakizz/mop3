@@ -338,12 +338,12 @@ fn handle_pop_connection(
         //oh lawd he comin
         let from_address = string_concat!(get_str(&post["account"]["acct"]), "@", account_domain);
         let mut message = MessageBuilder::new()
-            .from((display_name.as_str(), from_address.as_s))
+            .from((display_name.as_str(), from_address.as_str()))
             .to((account.display_name.clone(), account_addr.clone()))
             .subject(subject)
             //Fun fact: this line of code is 181 characters long
             .date(
-                DateTime::<Utc>::from_utc(
+                DateTime::<Utc>::from_naive_utc_and_offset(
                     NaiveDateTime::parse_from_str(
                         get_str(&post["created_at"]),
                         "%Y-%m-%dT%H:%M:%S%.3fZ",
