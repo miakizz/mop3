@@ -10,10 +10,10 @@ use chrono::offset::Utc;
 use chrono::DateTime;
 use clap::Parser;
 use deunicode::deunicode;
+use fancy_regex::Regex;
 use html2text::from_read;
 use mail_builder::*;
 use mail_parser::*;
-use onig::*;
 use reqwest::blocking::{multipart::Form, multipart::Part, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -119,7 +119,7 @@ struct Args {
     #[arg(long)]
     nosmtp: bool,
     /// Enables SMTP, ignored since it is now the default
-    #[arg(long,hide=true)]
+    #[arg(long, hide = true)]
     smtp: bool,
     /// Enables adding images as binary attachments, don't use with --inline
     #[arg(long)]
@@ -158,18 +158,17 @@ fn main() {
         args.address.as_deref().unwrap_or("127.0.0.1"),
         args.pop3port.unwrap_or(110),
     );
+
+    let listener = TcpListener::bind(account).unwrap();
     println!("Listening on {:?}", account);
+
     loop {
-        println!("before listener");
-        let listener = TcpListener::bind(account).unwrap();
-        println!("after listener");
         for stream in listener.incoming() {
             let stream = stream.unwrap();
             println!("Connection from {:?}", stream.peer_addr().unwrap());
             if let Some(new_recent) = handle_pop_connection(&args, stream, recent.clone()) {
                 recent = new_recent;
             };
-            println!("looping");
         }
     }
 }
@@ -179,11 +178,15 @@ fn smtp_setup() {
         args.address.as_deref().unwrap_or("127.0.0.1"),
         args.smtpport.unwrap_or(25),
     );
-    println!("Listening for SMTP on {:?}", smtp_addr);
+
     let smtp_listener = TcpListener::bind(smtp_addr).unwrap();
+    println!("Listening for SMTP on {:?}", smtp_addr);
+
     loop {
         for stream in smtp_listener.incoming() {
-            handle_smtp_connection(stream.unwrap(), &args);
+            let stream = stream.unwrap();
+            println!("SMTP Connection from {:?}", stream.peer_addr().unwrap());
+            handle_smtp_connection(stream, &args);
         }
     }
 }
@@ -257,7 +260,10 @@ fn handle_pop_connection(
             (
                 get_str(&post["reblog"]["content"]).to_string(),
                 &post["reblog"]["media_attachments"],
-                string_concat!("Boost from ", get_str(&post["reblog"]["account"]["display_name"])),
+                string_concat!(
+                    "Boost from ",
+                    get_str(&post["reblog"]["account"]["display_name"])
+                ),
                 get_str(&post["reblog"]["url"]),
             )
         } else {
@@ -269,8 +275,11 @@ fn handle_pop_connection(
             )
         };
         //Replace links with proxy if requested
-        if args.proxy.is_some(){
-            content = content.to_string().replace("<a href=\"", &string_concat!(" <a href=\"", args.proxy.as_ref().unwrap()).to_owned());
+        if args.proxy.is_some() {
+            content = content.to_string().replace(
+                "<a href=\"",
+                &string_concat!(" <a href=\"", args.proxy.as_ref().unwrap()).to_owned(),
+            );
         }
         //De-HTML-ify content if requested
         if !args.html {
@@ -324,18 +333,12 @@ fn handle_pop_connection(
         }
         //If requested, add the URL of the original post to the email
         if args.url {
-            content = string_concat!(
-                content,
-                "\r\n",
-                url
-            );
+            content = string_concat!(content, "\r\n", url);
         }
         //oh lawd he comin
+        let from_address = string_concat!(get_str(&post["account"]["acct"]), "@", account_domain);
         let mut message = MessageBuilder::new()
-            .from((
-                display_name.as_str(),
-                get_str(&post["account"]["acct"]),
-            ))
+            .from((display_name.as_str(), from_address.as_s))
             .to((account.display_name.clone(), account_addr.clone()))
             .subject(subject)
             //Fun fact: this line of code is 181 characters long
@@ -494,8 +497,6 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args) {
     let mut from = "".to_string();
     loop {
         match get_smtp_command(stream.try_clone().unwrap()) {
-            //I'm a little confused of why this is necessary, since from is in the RFC email spec
-            //so IDK why SMTP gets to be special
             SMTPCommand::Mailfrom(addr) => {
                 from = addr;
             }
@@ -525,12 +526,19 @@ fn handle_smtp_connection(mut stream: TcpStream, args: &Args) {
                 //only supports English and certain email clients
                 //which I know is not good to use English as a default, but for a project of this scope,I think it's ok.
                 //If it's including the original message, disable including original replies in your email client
-                let reply_pattern =
-                    Regex::new(r"-*\s*(On\s.+\s.+\n?wrote:{0,1})\s{0,1}-*$").unwrap();
+                let reply_pattern = Regex::new(r"\s*>* On .* wrote:").unwrap();
                 if !reply_id.is_empty() {
-                    if let Some(ind) = reply_pattern.find(&status) {
-                        status = status.split_at(ind.0).0.to_string()
+                    //if let Ok(ind) = reply_pattern.find(&status) {
+                    //    status = status.split_at(ind.0).0.to_string()
+                    //}
+                    let result = reply_pattern.find(&status).unwrap();
+                    if result.is_some() {
+                        println!("{:?}", result);
+                        let ind = result.unwrap();
+                        status = status.split_at(ind.start()).0.to_string();
                     }
+                    println!("status: {:?}", status);
+                    break;
                 }
                 //Strip whitespace and inline image markers from the end of status
                 status = status.replace('\u{FFFC}', "");
@@ -749,11 +757,25 @@ fn get_smtp_command(mut stream: TcpStream) -> SMTPCommand {
         if cur_line.starts_with("MAIL FROM:") {
             send_str!(stream, "250 OK\r\n");
             return SMTPCommand::Mailfrom(
-                re.captures(&cur_line).unwrap().at(0).unwrap().to_string(),
+                re.captures(&cur_line)
+                    .unwrap()
+                    .unwrap()
+                    .get(0)
+                    .unwrap()
+                    .as_str()
+                    .to_string(),
             );
         } else if cur_line.starts_with("RCPT TO:") {
             send_str!(stream, "250 OK\r\n");
-            return SMTPCommand::RcptTo(re.captures(&cur_line).unwrap().at(0).unwrap().to_string());
+            return SMTPCommand::RcptTo(
+                re.captures(&cur_line)
+                    .unwrap()
+                    .unwrap()
+                    .get(0)
+                    .unwrap()
+                    .as_str()
+                    .to_string(),
+            );
         } else if cur_line.starts_with("DATA") {
             send_str!(stream, "354 Send message content\r\n");
             let mut ret = "".to_string();
